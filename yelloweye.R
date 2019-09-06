@@ -1,6 +1,6 @@
 library(dplyr)
 library(ggplot2)
-library(ggsidekick) # for fourth_root_power_trans
+library(ggsidekick) # for fourth_root_power_trans; devtools::install_github("seananderson/ggsidekick")
 theme_set(ggsidekick::theme_sleek())
 library(sdmTMB)
 source("utils.R")
