@@ -161,7 +161,7 @@ ind_south <- get_index(pred_south, bias_correct = FALSE)
 
 ind_north$type <- "HBLL N"
 ind_south$type <- "HBLL S"
-ind$type <- "HBLL N + S"
+ind$type <- "HBLL all"
 
 bind_rows(ind_north, ind_south) %>%
   bind_rows(ind) %>%
