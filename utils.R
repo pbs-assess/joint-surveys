@@ -18,3 +18,28 @@ expand_prediction_grid <- function(grid, years) {
   nd[["year"]] <- rep(years, each = nrow(grid))
   nd
 }
+
+boot_biomass <- function(dat, reps = 100) {
+  out <- dat %>%
+    group_by(year, survey) %>%
+    do({
+      b <- boot::boot(., statistic = calc_bio, strata = .$grouping_code, R = reps)
+      suppressWarnings(bci <- boot::boot.ci(b, type = "perc"))
+      tibble::tibble(
+        mean_boot = mean(b$t),
+        median_boot = median(b$t),
+        lwr = bci$percent[[4]],
+        upr = bci$percent[[5]],
+        cv = sd(b$t)/mean(b$t),
+        biomass = calc_bio(.))
+    })
+}
+
+calc_bio <- function(dat, i = seq_len(nrow(dat))) {
+  dat[i, ] %>% group_by(year, survey, grouping_code) %>%
+    summarise(density = mean(density_ppkm2)) %>%
+    group_by(year) %>%
+    summarise(biomass = sum(density * 2 * 2)) %>%
+    pull(biomass)
+}
+

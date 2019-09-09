@@ -13,15 +13,16 @@ if (file.exists(f)) {
   d <- readRDS(f)
 } else {
   d <- gfdata::get_survey_sets("yelloweye rockfish",
-    ssid = c(22, 36, 39, 40))
+    ssid = c(22, 36, 39, 40)
+  )
   saveRDS(d, file = f)
 }
 d <- d %>%
   filter(survey_series_id %in% c(39, 40)) %>% # inside only
   select(
-  survey_abbrev, year, longitude, latitude, density_ppkm2,
-  grouping_code, depth_m
-) %>%
+    survey_abbrev, year, longitude, latitude, density_ppkm2,
+    grouping_code, depth_m
+  ) %>%
   rename(survey = survey_abbrev) %>%
   mutate(density_1000ppkm2 = density_ppkm2 / 1000)
 
@@ -120,8 +121,10 @@ ggsave("figs/hbll-joint-prediction.pdf", width = 10, height = 10)
 
 plot_map(predictions$data, "exp(est)") +
   scale_colour_viridis_c(trans = "fourth_root_power", option = "C") +
-  ggtitle(paste0("Prediction (fourth root transformed colour; ",
-  "fixed effects + all random effects)"))
+  ggtitle(paste0(
+    "Prediction (fourth root transformed colour; ",
+    "fixed effects + all random effects)"
+  ))
 ggsave("figs/hbll-joint-prediction-sqrt.pdf", width = 10, height = 10)
 
 plot_map(predictions$data, "exp(est_non_rf)") +
@@ -169,26 +172,53 @@ ind_north$type <- "HBLL INS N"
 ind_south$type <- "HBLL INS S"
 ind$type <- "HBLL INS all"
 
-n_years <- filter(d_utm, survey %in% "HBLL INS N") %>% pull(year) %>% unique()
-s_years <- filter(d_utm, survey %in% "HBLL INS S") %>% pull(year) %>% unique()
+n_years <- filter(d_utm, survey %in% "HBLL INS N") %>%
+  pull(year) %>%
+  unique()
+s_years <- filter(d_utm, survey %in% "HBLL INS S") %>%
+  pull(year) %>%
+  unique()
 
 ind_north_plot <- filter(ind_north, year %in% n_years)
 ind_south_plot <- filter(ind_south, year %in% s_years)
 all_plot <- bind_rows(ind_north_plot, ind_south_plot) %>%
   bind_rows(ind)
 
-bind_rows(ind_north, ind_south) %>%
+g <- bind_rows(ind_north, ind_south) %>%
   bind_rows(ind) %>%
   ggplot(aes(year, est * scale)) +
   geom_line(aes(colour = type)) +
   geom_point(aes(colour = type), pch = 21) +
   geom_point(data = all_plot, aes(colour = type)) +
   geom_ribbon(aes(ymin = lwr * scale, ymax = upr * scale, fill = type),
-    alpha = 0.2, colour = NA) +
+    alpha = 0.2, colour = NA
+  ) +
   facet_wrap(~type, ncol = 1) +
   xlab("Year") + ylab("Estimated density (1000s of fish)") +
   geom_vline(xintercept = seq(2004, 2018, 2), lty = 2, alpha = 0.2, lwd = 0.2) +
   scale_color_brewer(palette = "Set2") +
   scale_fill_brewer(palette = "Set2") +
   scale_x_continuous(breaks = seq(2004, 2018, 2))
+g
 ggsave("figs/hbll-index-components.pdf", width = 5.5, height = 8.5)
+
+# Design based comparison: -----------------------------------
+out <- boot_biomass(d, reps = 500L)
+all_modelled <- bind_rows(ind_north, ind_south) %>%
+  bind_rows(ind)
+design_based <- all_modelled %>%
+  group_by(type) %>%
+  mutate(est_scaled = est * scale) %>%
+  summarise(geomean = exp(mean(log(est_scaled)))) %>%
+  rename(survey = type) %>%
+  right_join(out, by = "survey") %>%
+  group_by(survey) %>%
+  mutate(scaled_biomass = biomass / (exp(mean(log(biomass))) / geomean)) %>%
+  mutate(scaled_max = upr / (exp(mean(log(biomass))) / geomean)) %>%
+  mutate(scaled_min = lwr / (exp(mean(log(biomass))) / geomean)) %>%
+  rename(type = survey)
+
+g + geom_line(data = design_based, aes(x = year, y = scaled_biomass), inherit.aes = FALSE) +
+  geom_point(data = design_based, aes(x = year, y = scaled_biomass), inherit.aes = FALSE) +
+  geom_ribbon(data = design_based, aes(x = year, ymin = scaled_min, ymax = scaled_max), inherit.aes = FALSE, alpha = 0.1)
+ggsave("figs/hbll-index-components-with-design.pdf", width = 5.5, height = 8.5)
