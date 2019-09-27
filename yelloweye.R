@@ -11,28 +11,29 @@ dir.create("figs", showWarnings = FALSE)
 f <- "data-generated/yelloweye-rockfish-inside.rds"
 if (file.exists(f)) {
   d <- readRDS(f)
+
 } else {
   d <- gfdata::get_survey_sets("yelloweye rockfish",
     ssid = c(22, 36, 39, 40)
   )
+  block_ids <- gfdata::get_survey_blocks(ssid = c(22, 36, 39, 40))
+  d <- dplyr::left_join(d, block_ids)
+  d$block_designation <- as.numeric(d$block_designation)
   saveRDS(d, file = f)
 }
+
 d <- d %>%
   filter(survey_series_id %in% c(39, 40)) %>% # inside only
   select(
     survey_abbrev, year, longitude, latitude, density_ppkm2,
-    grouping_code, depth_m
+    grouping_code, depth_m, block_designation
   ) %>%
-  rename(survey = survey_abbrev) %>%
+  rename(survey = survey_abbrev, block = block_designation) %>%
   mutate(density_1000ppkm2 = density_ppkm2 / 1000)
 
-# log and scale the depth predictor:
-d$depth_log <- log(d$depth_m)
-d$depth_centred <- d$depth_log - mean(d$depth_log)
-d$depth_scaled <- d$depth_centred / sd(d$depth_centred)
 d_utm <- convert2utm(d, coords = c("longitude", "latitude"))
 
-ggplot(d_utm, aes(X, Y,
+g <- ggplot(d_utm, aes(X, Y,
   size = density_1000ppkm2,
   colour = survey
 )) +
@@ -42,42 +43,56 @@ ggplot(d_utm, aes(X, Y,
 ggsave("figs/hbll-joint-raw-data.pdf", width = 10, height = 10)
 
 joint_grid <- readRDS("data-generated/hbll-inside-grid.rds")
+d_utm <- left_join(d_utm, select(joint_grid, block, rock100, rock20), by = "block")
+sum(is.na(d_utm$rock100))
+sum(is.na(d_utm$rock20))
+sum(!is.na(d_utm$rock20))
+
+g <- ggplot(d_utm, aes(X, Y, colour = is.na(rock100))) +
+  facet_wrap(~year) +
+  geom_point(pch = 21)
+ggsave("figs/hbll-missing-blocks.pdf", width = 10, height = 10)
+
+d_utm <- filter(d_utm, !is.na(rock100))
+
+d_utm$depth_log <- log(d_utm$depth_m)
+d_utm$depth_centred <- d_utm$depth_log - mean(d_utm$depth_log)
+d_utm$depth_scaled <- d_utm$depth_centred / sd(d_utm$depth_centred)
+d_utm$Y_cent <- d_utm$Y - mean(d_utm$Y)
+d_utm$rock20_scaled <- sqrt(d_utm$rock20) / sd(sqrt(d_utm$rock20))
+
 joint_grid_utm <- convert2utm(joint_grid)
 years <- sort(unique(d_utm$year))
 joint_grid_utm <- expand_prediction_grid(joint_grid_utm, years = years) %>%
-  mutate(depth_centred = log(depth) - mean(d$depth_log)) %>%
-  mutate(depth_scaled = depth_centred / sd(d$depth_centred))
+  mutate(depth_centred = log(depth) - mean(d_utm$depth_log)) %>%
+  mutate(depth_scaled = depth_centred / sd(d_utm$depth_centred)) %>%
+  mutate(rock20_scaled = sqrt(rock20) / sd(sqrt(d_utm$rock20)))
 joint_grid_utm <- mutate(joint_grid_utm, year_fake = ifelse(year == 2003, 2004, year))
 joint_grid_utm <- mutate(joint_grid_utm, Y_cent = Y - mean(d_utm$Y))
 
-# n_years <- filter(d_utm, survey %in% "HBLL INS N") %>% pull(year) %>% unique()
-# s_years <- filter(d_utm, survey %in% "HBLL INS S") %>% pull(year) %>% unique()
-# north_grid_utm <- filter(joint_grid_utm, survey %in% "HBLL INS N", year %in% n_years)
-# south_grid_utm <- filter(joint_grid_utm, survey %in% "HBLL INS S", year %in% s_years)
 north_grid_utm <- filter(joint_grid_utm, survey %in% "HBLL INS N")
 south_grid_utm <- filter(joint_grid_utm, survey %in% "HBLL INS S")
 
-sp <- make_spde(d_utm$X, d_utm$Y, n_knots = 175)
+sp <- make_spde(d_utm$X, d_utm$Y, n_knots = 150)
 plot_spde(sp)
 
 # d_utm <- mutate(d_utm, year_fake = ifelse(year %in% c(2003, 2004), 2005, year))
 
-d_utm$Y_cent <- d_utm$Y - mean(d_utm$Y)
 model_file <- "data-generated/hbll-inside-joint.rds"
 if (!file.exists(model_file)) {
   tictoc::tic()
   m <- sdmTMB(
     formula = density_1000ppkm2 ~ 0 +
       Y_cent + I(Y_cent^2) +
-      as.factor(year) + depth_scaled + I(depth_scaled^2),
+      as.factor(year) + depth_scaled + I(depth_scaled^2) + rock20_scaled,
     data = d_utm,
     spde = sp,
     time = "year",
     silent = FALSE,
     anisotropy = TRUE,
     ar1_fields = TRUE,
-    include_spatial = FALSE,
-    control = sdmTMBcontrol(step.min = 0.5),
+    include_spatial = TRUE,
+    # control = sdmTMBcontrol(step.min = 0.2),
     family = tweedie(link = "log")
   )
   tictoc::toc()
@@ -219,6 +234,6 @@ design_based <- all_modelled %>%
   rename(type = survey)
 
 g + geom_line(data = design_based, aes(x = year, y = scaled_biomass), inherit.aes = FALSE) +
-  geom_point(data = design_based, aes(x = year, y = scaled_biomass), inherit.aes = FALSE) +
+  geom_point(data = design_based, aes(x = year, y = scaled_biomass), inherit.aes = FALSE, pch = 4) +
   geom_ribbon(data = design_based, aes(x = year, ymin = scaled_min, ymax = scaled_max), inherit.aes = FALSE, alpha = 0.1)
 ggsave("figs/hbll-index-components-with-design.pdf", width = 5.5, height = 8.5)
