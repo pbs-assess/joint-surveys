@@ -43,37 +43,37 @@ g <- ggplot(d_utm, aes(X, Y,
 ggsave("figs/hbll-joint-raw-data.pdf", width = 10, height = 10)
 
 joint_grid <- readRDS("data-generated/hbll-inside-grid.rds")
-d_utm <- left_join(d_utm, select(joint_grid, block, rock100, rock20), by = "block")
-sum(is.na(d_utm$rock100))
-sum(is.na(d_utm$rock20))
-sum(!is.na(d_utm$rock20))
+# d_utm <- left_join(d_utm, select(joint_grid, block, rock100, rock20), by = "block")
+# sum(is.na(d_utm$rock100))
+# sum(is.na(d_utm$rock20))
+# sum(!is.na(d_utm$rock20))
 
-g <- ggplot(d_utm, aes(X, Y, colour = is.na(rock100))) +
-  facet_wrap(~year) +
-  geom_point(pch = 21)
-ggsave("figs/hbll-missing-blocks.pdf", width = 10, height = 10)
+# g <- ggplot(d_utm, aes(X, Y, colour = is.na(rock100))) +i
+#   facet_wrap(~year) +
+#   geom_point(pch = 21)
+# ggsave("figs/hbll-missing-blocks.pdf", width = 10, height = 10)
 
-d_utm <- filter(d_utm, !is.na(rock100))
+# d_utm <- filter(d_utm, !is.na(rock100))
 
 d_utm$depth_log <- log(d_utm$depth_m)
 d_utm$depth_centred <- d_utm$depth_log - mean(d_utm$depth_log)
 d_utm$depth_scaled <- d_utm$depth_centred / sd(d_utm$depth_centred)
 d_utm$Y_cent <- d_utm$Y - mean(d_utm$Y)
-d_utm$rock20_scaled <- sqrt(d_utm$rock20) / sd(sqrt(d_utm$rock20))
+# d_utm$rock20_scaled <- sqrt(d_utm$rock20) / sd(sqrt(d_utm$rock20))
 
 joint_grid_utm <- convert2utm(joint_grid)
 years <- sort(unique(d_utm$year))
 joint_grid_utm <- expand_prediction_grid(joint_grid_utm, years = years) %>%
   mutate(depth_centred = log(depth) - mean(d_utm$depth_log)) %>%
-  mutate(depth_scaled = depth_centred / sd(d_utm$depth_centred)) %>%
-  mutate(rock20_scaled = sqrt(rock20) / sd(sqrt(d_utm$rock20)))
+  mutate(depth_scaled = depth_centred / sd(d_utm$depth_centred))
+  # mutate(rock20_scaled = sqrt(rock20) / sd(sqrt(d_utm$rock20)))
 joint_grid_utm <- mutate(joint_grid_utm, year_fake = ifelse(year == 2003, 2004, year))
 joint_grid_utm <- mutate(joint_grid_utm, Y_cent = Y - mean(d_utm$Y))
 
 north_grid_utm <- filter(joint_grid_utm, survey %in% "HBLL INS N")
 south_grid_utm <- filter(joint_grid_utm, survey %in% "HBLL INS S")
 
-sp <- make_spde(d_utm$X, d_utm$Y, n_knots = 150)
+sp <- make_spde(d_utm$X, d_utm$Y, n_knots = 200)
 plot_spde(sp)
 
 # d_utm <- mutate(d_utm, year_fake = ifelse(year %in% c(2003, 2004), 2005, year))
@@ -84,15 +84,15 @@ if (!file.exists(model_file)) {
   m <- sdmTMB(
     formula = density_1000ppkm2 ~ 0 +
       Y_cent + I(Y_cent^2) +
-      as.factor(year) + depth_scaled + I(depth_scaled^2) + rock20_scaled,
+      as.factor(year) + depth_scaled + I(depth_scaled^2),
     data = d_utm,
     spde = sp,
     time = "year",
     silent = FALSE,
     anisotropy = TRUE,
-    ar1_fields = TRUE,
+    ar1_fields = FALSE,
     include_spatial = TRUE,
-    # control = sdmTMBcontrol(step.min = 0.2),
+    control = sdmTMBcontrol(step.min = 0.1),
     family = tweedie(link = "log")
   )
   tictoc::toc()
