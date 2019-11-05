@@ -2,7 +2,7 @@ library(sdmTMB)
 library(ggplot2)
 library(dplyr)
 
-set.seed(13333)
+set.seed(133)
 
 d <- tibble::tibble(X = runif(1000, 0, 1), Y = runif(1000, 0, 1))
 d$year <- rep(1:10, each = 100)
@@ -53,13 +53,14 @@ ggplot(.d, aes_string("X", "Y", colour = "eps_st")) +
 f <- ~ 0 + as.factor(year) + Y_cent
 X_ij <- model.matrix(f, .d)
 
-b_j <- c(rlnorm(10, meanlog = 1, sdlog = 0.1), 0)
+set.seed(23334)
+b_j <- c(rlnorm(10, meanlog = 1, sdlog = 0.05), 3)
 # b_j <- c(rlnorm(10, meanlog = 1, sdlog = 0.4))
 b_j
 
 .d$eta <- as.numeric(.d$omega_s + .d$eps_st + X_ij %*% b_j)
 .d$y <- exp(.d$eta)
-.d$y[1:1000] <- rlnorm(1000, meanlog = .d$eta[1:1000], sdlog = 0.05) # observations
+.d$y[1:1000] <- MASS::rnegbin(1000, mu = exp(.d$eta[1:1000]), theta = 4) # observations
 
 ggplot(.d, aes_string("X", "Y", colour = "y")) +
   geom_point() +
@@ -79,35 +80,35 @@ d %>% group_by(year) %>% count()
 d <- d[-sample(which(d$year %in% seq(2, 10, 2)), 180), ]
 d %>% group_by(year) %>% count()
 
-ggplot(d, aes_string("X", "Y", colour = "y")) +
+ggplot(d, aes_string("X", "Y", colour = "log(y)")) +
   geom_point() +
   scale_color_viridis_c() +
   facet_wrap(~year)
 
 sp <- make_spde(d$X, d$Y, n_knots = 80)
-plot_spde(sp)
+# plot_spde(sp)
 
 m <- sdmTMB(y ~ 0 + as.factor(year), data = d, spde = sp,
-  family = sdmTMB::lognormal(link = "log"), include_spatial = TRUE,
+  family = sdmTMB::nbinom2(link = "log"), include_spatial = TRUE,
   silent = FALSE, time = "year")
 m
 
 p <- predict(m, newdata = nd, return_tmb_object = TRUE, xy_cols = c("X", "Y"))
 
-ggplot(p$data, aes_string("X", "Y", fill = "est")) +
-  geom_raster() +
-  scale_fill_viridis_c() +
-  facet_wrap(~year)
-
-ggplot(p$data, aes_string("X", "Y", fill = "omega_s")) +
-  geom_raster() +
-  scale_fill_viridis_c() +
-  facet_wrap(~year)
-
-ggplot(p$data, aes_string("X", "Y", fill = "est_rf")) +
-  geom_raster() +
-  scale_fill_viridis_c() +
-  facet_wrap(~year)
+# ggplot(p$data, aes_string("X", "Y", fill = "est")) +
+#   geom_raster() +
+#   scale_fill_viridis_c() +
+#   facet_wrap(~year)
+#
+# ggplot(p$data, aes_string("X", "Y", fill = "omega_s")) +
+#   geom_raster() +
+#   scale_fill_viridis_c() +
+#   facet_wrap(~year)
+#
+# ggplot(p$data, aes_string("X", "Y", fill = "est_rf")) +
+#   geom_raster() +
+#   scale_fill_viridis_c() +
+#   facet_wrap(~year)
 
 .i <- get_index(p, bias_correct = FALSE)
 
