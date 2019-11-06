@@ -50,11 +50,11 @@ ggplot(.d, aes_string("X", "Y", colour = "eps_st")) +
   facet_grid(type~year)
 
 .d$Y_cent <- .d$Y - mean(.d$Y)
-f <- ~ 0 + as.factor(year) + Y_cent
+f <- ~ 0 + as.factor(year) + Y_cent + I(Y_cent^2)
 X_ij <- model.matrix(f, .d)
 
-set.seed(23334)
-b_j <- c(rlnorm(10, meanlog = 1, sdlog = 0.05), 3)
+set.seed(234)
+b_j <- c(rlnorm(10, meanlog = 1, sdlog = 0.2), 0.1, -1.0)
 # b_j <- c(rlnorm(10, meanlog = 1, sdlog = 0.4))
 b_j
 
@@ -64,7 +64,7 @@ b_j
 
 ggplot(.d, aes_string("X", "Y", colour = "y")) +
   geom_point() +
-  scale_color_viridis_c() +
+  scale_color_viridis_c(trans = "sqrt") +
   facet_grid(type~year)
 
 d <- filter(.d, type == "a_obs")
@@ -76,21 +76,21 @@ d$omega_s <- NULL
 # throw out data
 d <- d[!(d$year %in% seq(1, 9, 2) & d$Y >= 0.5), ]
 d <- d[!(d$year %in% seq(2, 10, 2) & d$Y < 0.5), ]
-d %>% group_by(year) %>% count()
-d <- d[-sample(which(d$year %in% seq(2, 10, 2)), 180), ]
-d %>% group_by(year) %>% count()
+# d %>% group_by(year) %>% count()
+# d <- d[-sample(which(d$year %in% seq(2, 10, 2)), 180), ]
+# d %>% group_by(year) %>% count()
 
 ggplot(d, aes_string("X", "Y", colour = "log(y)")) +
   geom_point() +
   scale_color_viridis_c() +
   facet_wrap(~year)
 
-sp <- make_spde(d$X, d$Y, n_knots = 80)
+sp <- make_spde(d$X, d$Y, n_knots = 250)
 # plot_spde(sp)
 
-m <- sdmTMB(y ~ 0 + as.factor(year), data = d, spde = sp,
+m <- sdmTMB(y ~ 0 + as.factor(year) + Y_cent + I(Y_cent^2), data = d, spde = sp,
   family = sdmTMB::nbinom2(link = "log"), include_spatial = TRUE,
-  silent = FALSE, time = "year")
+  silent = FALSE, time = "year", reml = TRUE)
 m
 
 p <- predict(m, newdata = nd, return_tmb_object = TRUE, xy_cols = c("X", "Y"))
@@ -110,18 +110,11 @@ p <- predict(m, newdata = nd, return_tmb_object = TRUE, xy_cols = c("X", "Y"))
 #   scale_fill_viridis_c() +
 #   facet_wrap(~year)
 
-.i <- get_index(p, bias_correct = FALSE)
+.i <- get_index(p, bias_correct = TRUE)
 
 actual <- group_by(nd, year) %>%
   summarise(total = sum(y))
 
-.f <- exp(mean(log(actual$total))) / exp(mean(log(.i$est)))
-
-actual$total <- scale(actual$total)
-.i$est <- scale(.i$est)
-
-plot_dat <- data.frame(index = c(actual$total, .i$est), year = rep(1:10, 2),
-  type = rep(c("True", "Estimated"), each = 10))
-
-ggplot(plot_dat, aes(year, index, colour = type)) + geom_line() +
-  geom_vline(xintercept = seq(2, 10, 2), lty = 2)
+ggplot(.i, aes(year)) + geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey50") +
+  geom_line(data = actual, mapping = aes(y = total), col = "red") +
+  ggsidekick::theme_sleek()
