@@ -133,6 +133,10 @@ ggplot(p$data, aes_string("X", "Y", fill = "est_rf")) +
 actual <- group_by(nd, year) %>%
   summarise(total = sum(y))
 
-ggplot(.i, aes(year)) + geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey50") +
-  geom_line(data = actual, mapping = aes(y = total), col = "red") +
-  ggsidekick::theme_sleek()
+ggplot(.i, aes(year)) +
+  geom_vline(xintercept = seq(2, 10, 2), lty = 2, col = "grey60", lwd = 0.3) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey80") +
+  geom_line(aes(y = est), colour = "black") +
+  geom_line(data = actual, mapping = aes(y = total), col = "red", lwd = 1.2, lty = 1) +
+  ggsidekick::theme_sleek() +
+  ylab("Total abundance") +  scale_x_continuous(breaks = seq(1, 10, 1))
