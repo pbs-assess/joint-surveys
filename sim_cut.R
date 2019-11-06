@@ -95,20 +95,38 @@ m
 
 p <- predict(m, newdata = nd, return_tmb_object = TRUE, xy_cols = c("X", "Y"))
 
-# ggplot(p$data, aes_string("X", "Y", fill = "est")) +
-#   geom_raster() +
-#   scale_fill_viridis_c() +
-#   facet_wrap(~year)
-#
-# ggplot(p$data, aes_string("X", "Y", fill = "omega_s")) +
-#   geom_raster() +
-#   scale_fill_viridis_c() +
-#   facet_wrap(~year)
-#
-# ggplot(p$data, aes_string("X", "Y", fill = "est_rf")) +
-#   geom_raster() +
-#   scale_fill_viridis_c() +
-#   facet_wrap(~year)
+ggplot(p$data, aes_string("X", "Y", fill = "est")) +
+  geom_raster() +
+  scale_fill_viridis_c() +
+  facet_wrap(~year)
+
+ggplot(filter(.d, type == "b_grid"), aes_string("X", "Y", fill = "eta")) +
+  geom_raster() +
+  scale_fill_viridis_c() +
+  facet_wrap(~year)
+
+ggplot(filter(p$data, year == 1), aes_string("X", "Y", fill = "omega_s")) +
+  geom_raster() +
+  scale_fill_gradient2()
+
+ggplot(filter(.d, type == "b_grid", year == 1), aes_string("X", "Y", fill = "omega_s")) +
+  geom_raster() +
+  scale_fill_gradient2()
+
+ggplot(p$data, aes_string("X", "Y", fill = "est_rf")) +
+  geom_raster() +
+  scale_fill_gradient2() +
+  facet_wrap(~year)
+
+ggplot(filter(.d, type == "b_grid"), aes_string("X", "Y", fill = "omega_s + eps_st")) +
+  geom_raster() +
+  scale_fill_gradient2() +
+  facet_wrap(~year)
+
+ggplot(p$data, aes_string("X", "Y", fill = "est_rf")) +
+  geom_raster() +
+  scale_fill_gradient2() +
+  facet_wrap(~year)
 
 .i <- get_index(p, bias_correct = TRUE)
 
